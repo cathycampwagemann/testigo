@@ -3,8 +3,6 @@
 # Ejecutar en Google Colab
 # ============================================================
 
-!pip install -q fastapi uvicorn openai==1.12.0 httpx==0.24.1 numpy scikit-learn
-
 # Cloudflared (túnel sin ngrok)
 !wget -q -O /usr/local/bin/cloudflared https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64
 !chmod +x /usr/local/bin/cloudflared
@@ -244,4 +242,5 @@ if __name__ == "__main__":
     # Para producción es mejor usar: uvicorn app:app --host 0.0.0.0 --port 8000
     import uvicorn
     uvicorn.run("app:app", host="0.0.0.0", port=8000, log_level="info")
+
 
