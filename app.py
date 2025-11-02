@@ -3,10 +3,6 @@
 # Ejecutar en Google Colab
 # ============================================================
 
-# Cloudflared (túnel sin ngrok)
-!wget -q -O /usr/local/bin/cloudflared https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64
-!chmod +x /usr/local/bin/cloudflared
-
 import os, re, time, asyncio, subprocess, numpy as np
 from sklearn.metrics.pairwise import cosine_similarity
 from fastapi import FastAPI
@@ -242,5 +238,6 @@ if __name__ == "__main__":
     # Para producción es mejor usar: uvicorn app:app --host 0.0.0.0 --port 8000
     import uvicorn
     uvicorn.run("app:app", host="0.0.0.0", port=8000, log_level="info")
+
 
 
