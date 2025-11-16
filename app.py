@@ -6,16 +6,23 @@ from openai import OpenAI
 import numpy as np
 import requests
 import re
+import os
+import time
 
-# ====== CLAVES ======
-OPENAI_API_KEY = "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"  # <--- pon tu clave
-DID_API_KEY = "Y2F0eWNhbXBAZ21haWwuY29t:bdpnussf2aNNVCXyQVmyC"
-# ====================
+# ====== CLAVES (en producción mejor usar variables de entorno) ======
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "TU_CLAVE_AQUI_SI_ESTÁS_EN_LOCAL")
+DID_API_KEY = os.getenv("DID_API_KEY", "TU_CLAVE_DID_AQUI_SI_ESTÁS_EN_LOCAL")
+# ===================================================================
 
 client = OpenAI(api_key=OPENAI_API_KEY)
 
 app = FastAPI()
-app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_headers=["*"], allow_methods=["*"])
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_headers=["*"],
+    allow_methods=["*"],
+)
 
 QA_PAIRS = []
 EMB_Q = None
@@ -30,29 +37,34 @@ def cosine_sim_vector_to_matrix(query_vec, matrix):
     q = np.array(query_vec, dtype=float)
     M = np.array(matrix, dtype=float)
 
-    # producto punto entre cada fila de M y q
-    num = M @ q
-    # norma de cada fila de M
+    if M.size == 0:
+        return np.array([])
+
+    num = M @ q                     # producto punto
     M_norm = np.linalg.norm(M, axis=1)
-    # norma del vector q
     q_norm = np.linalg.norm(q)
 
     denom = (M_norm * q_norm) + 1e-10  # para evitar división por cero
     return num / denom
-    
+
+
 def embed(texts):
     vec = []
     for t in texts:
-        e = client.embeddings.create(model="text-embedding-3-small", input=t).data[0].embedding
+        e = client.embeddings.create(
+            model="text-embedding-3-small",
+            input=t
+        ).data[0].embedding
         vec.append(e)
     return np.array(vec)
+
 
 def did_video(text):
     data = {
         "script": {
             "type": "text",
             "provider": {"type": "microsoft", "voice_id": "es-US-AlonsoNeural"},
-            "input": text
+            "input": text.strip()
         },
         "config": {"fluent": True, "pad_audio": 0.5},
         "source_url": "https://i.ibb.co/Tx4fBvDj/Alessio.jpg"
@@ -68,15 +80,16 @@ def did_video(text):
     # Polling
     for _ in range(30):
         status = requests.get(f"https://api.d-id.com/talks/{talk_id}", headers=h).json()
-        if "result_url" in status and status["result_url"]:
+        if "result_url" in status and status.get("result_url"):
             return status
-        import time; time.sleep(1)
+        time.sleep(1)
 
     return {"error": "timeout"}
 
 
 class Load(BaseModel):
     text: str
+
 
 class Ask(BaseModel):
     question: str
@@ -85,17 +98,20 @@ class Ask(BaseModel):
 @app.post("/load")
 def load(b: Load):
     global QA_PAIRS, EMB_Q
-    
+
     text = b.text.replace("\xa0", " ").replace("\r", " ").strip()
     lines = [l.strip() for l in text.split("\n") if l.strip()]
     QA_PAIRS = []
 
-    for i in range(len(lines)-1):
+    for i in range(len(lines) - 1):
         if ("Para que" in lines[i]) or ("Respecto" in lines[i]):
-            QA_PAIRS.append((lines[i], lines[i+1]))
+            QA_PAIRS.append((lines[i], lines[i + 1]))
 
     questions = [q for q, a in QA_PAIRS]
-    EMB_Q = embed(questions)
+    if questions:
+        EMB_Q = embed(questions)
+    else:
+        EMB_Q = np.array([])
 
     return {"ok": True, "pairs": len(QA_PAIRS)}
 
@@ -104,10 +120,21 @@ def load(b: Load):
 def ask(b: Ask):
     global QA_PAIRS, EMB_Q
 
-    qe = client.embeddings.create(model="text-embedding-3-small", input=b.question).data[0].embedding
-    sims = cosine_sim_vector_to_matrix(qe, EMB)
+    if EMB_Q is None or EMB_Q.size == 0 or not QA_PAIRS:
+        return did_video("No dispongo de esa información en mis registros.")
+
+    qe = client.embeddings.create(
+        model="text-embedding-3-small",
+        input=b.question
+    ).data[0].embedding
+
+    sims = cosine_sim_vector_to_matrix(qe, EMB_Q)
+    if sims.size == 0:
+        return did_video("No dispongo de esa información en mis registros.")
+
     idx = int(np.argmax(sims))
 
+    # Umbral de similitud
     if sims[idx] < 0.40:
         return did_video("No dispongo de esa información en mis registros.")
 
@@ -127,22 +154,41 @@ FRONT = """
 
 <script>
 async function loadBase(){
-  let t=document.getElementById('base').value;
-  await fetch('/load',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text:t})});
-  document.getElementById('base').style.display='none';
+  let t = document.getElementById('base').value;
+  if(!t.trim()){ alert("Pega el texto primero"); return; }
+  let r = await fetch('/load',{
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({text:t})
+  });
+  let j = await r.json();
+  if(j.ok){
+    document.getElementById('base').style.display='none';
+    alert("Base cargada: " + j.pairs + " pares pregunta-respuesta");
+  }
 }
+
 async function ask(){
-  let q=document.getElementById('q').value;
-  let r=await fetch('/ask',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({question:q})});
-  let j=await r.json();
-  if(j.result_url) document.getElementById('v').src=j.result_url;
+  let q = document.getElementById('q').value;
+  if(!q.trim()){ alert("Escribe una pregunta"); return; }
+  let r = await fetch('/ask',{
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({question:q})
+  });
+  let j = await r.json();
+  if(j.result_url){
+    document.getElementById('v').src = j.result_url;
+  } else {
+    alert("No se pudo generar video");
+    console.log(j);
+  }
 }
 </script>
 </body></html>
 """
 
+
 @app.get("/", response_class=HTMLResponse)
 def home():
     return FRONT
-
-
