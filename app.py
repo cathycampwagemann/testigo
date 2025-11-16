@@ -51,7 +51,7 @@ def did_video(text):
     data = {
         "script": {
             "type": "text",
-            "provider": {"type": "microsoft", "voice_id": "es-ES-AlvaroNeural"},
+            "provider": {"type": "microsoft", "voice_id": "es-US-AlonsoNeural"},
             "input": text
         },
         "config": {"fluent": True, "pad_audio": 0.5},
@@ -105,7 +105,7 @@ def ask(b: Ask):
     global QA_PAIRS, EMB_Q
 
     qe = client.embeddings.create(model="text-embedding-3-small", input=b.question).data[0].embedding
-    sims = cosine_similarity([qe], EMB_Q)[0]
+    sims = cosine_sim_vector_to_matrix(qe, EMB)
     idx = int(np.argmax(sims))
 
     if sims[idx] < 0.40:
@@ -144,4 +144,5 @@ async function ask(){
 @app.get("/", response_class=HTMLResponse)
 def home():
     return FRONT
+
 
