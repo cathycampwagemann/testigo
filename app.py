@@ -63,3 +63,17 @@ def embed(texts):
 def did_video(text: str):
     data = {
         "script": {
+            "type": "text",
+            "provider": {"type": "microsoft", "voice_id": "es-US-AlonsoNeural"},
+            "input": text.strip(),
+        },
+        "config": {
+            "fluent": True,
+            "pad_audio": 0.5,
+        },
+        "source_url": "https://i.ibb.co/Tx4fBvDj/Alessio.jpg",
+    }
+
+    headers = {"Authorization": f"Basic {DID_API_KEY}"}
+    # crear el talk
+    r = requests.post("https://api.d-id.com/talks", headers=headers, json=data).json()
