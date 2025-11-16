@@ -4,7 +4,6 @@ from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
 from openai import OpenAI
 import numpy as np
-from sklearn.metrics.pairwise import cosine_similarity
 import requests
 import re
 
@@ -21,6 +20,26 @@ app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_headers=["*"], all
 QA_PAIRS = []
 EMB_Q = None
 
+
+def cosine_sim_vector_to_matrix(query_vec, matrix):
+    """
+    query_vec: vector (dim,)
+    matrix: matriz (n, dim)
+    return: array de similitudes (n,)
+    """
+    q = np.array(query_vec, dtype=float)
+    M = np.array(matrix, dtype=float)
+
+    # producto punto entre cada fila de M y q
+    num = M @ q
+    # norma de cada fila de M
+    M_norm = np.linalg.norm(M, axis=1)
+    # norma del vector q
+    q_norm = np.linalg.norm(q)
+
+    denom = (M_norm * q_norm) + 1e-10  # para evitar división por cero
+    return num / denom
+    
 def embed(texts):
     vec = []
     for t in texts:
@@ -125,3 +144,4 @@ async function ask(){
 @app.get("/", response_class=HTMLResponse)
 def home():
     return FRONT
+
